@@ -1010,7 +1010,7 @@
 
             const pesan = `Halo *${buyerName}*, berikut rincian tagihan makan siang yang belum terbayar ya 😊\n\n` +
                 rincianLines.join('\n') +
-                `\n\n*Total Tagihan: ${formatRupiah(totalTagihan)}*\nTerima kasih! 🙏`;
+                `\n\n*Total Tagihan: ${formatRupiah(totalTagihan)}*\n\nPayment Method:\nBNI 0332812154\nLinkAja 08111110709\n\nTerima kasih! 🙏`;
 
             copyTextToClipboard(pesan);
             const phoneWA = normalizePhoneWA(phoneFound);
