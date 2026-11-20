@@ -1,0 +1,1504 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard Penjualan Makan Siang</title>
+    
+    <!-- Google Fonts: Inter -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    
+    <!-- Tailwind CSS via CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    },
+                    colors: {
+                        brand: {
+                            amber: '#d97706',
+                            emerald: '#059669',
+                            slate: '#1e293b'
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+
+    <!-- Chart.js via CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+    
+    <!-- SheetJS (XLSX) via CDN -->
+    <script src="https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js"></script>
+
+    <!-- Lucide Icons via CDN -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+
+    <style>
+        /* Custom scrollbar untuk tabel & modal */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #f1f5f9;
+            border-radius: 8px;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 8px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
+        }
+        .chart-container {
+            position: relative;
+            width: 100%;
+            height: 250px;
+        }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800 font-sans antialiased min-h-screen flex flex-col">
+
+    <!-- Toast Notification Container (Pengganti alert()) -->
+    <div id="toastContainer" class="fixed bottom-5 right-5 z-50 flex flex-col gap-2 pointer-events-none"></div>
+
+    <!-- Header Section -->
+    <header class="bg-gradient-to-r from-slate-900 via-slate-800 to-amber-950 text-white shadow-lg sticky top-0 z-30">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+            <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+                <!-- Brand & Title -->
+                <div class="flex items-center gap-3">
+                    <div class="w-11 h-11 rounded-xl bg-gradient-to-br from-amber-400 to-amber-600 flex items-center justify-center text-slate-900 shadow-md shrink-0">
+                        <i data-lucide="utensils" class="w-6 h-6 stroke-[2.2]"></i>
+                    </div>
+                    <div>
+                        <div class="flex items-center gap-2">
+                            <h1 class="text-lg sm:text-xl font-bold tracking-tight text-white">LunchSales Analytics</h1>
+                            <span class="hidden sm:inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                                Live Dashboard
+                            </span>
+                        </div>
+                        <p class="text-xs sm:text-sm text-slate-300">Pencatatan Penjualan Makan Siang & Rekap Otomatis</p>
+                    </div>
+                </div>
+
+                <!-- Action Buttons -->
+                <div class="flex flex-wrap items-center gap-2 sm:gap-3">
+                    <!-- Hidden File Input untuk Upload Excel -->
+                    <input type="file" id="excelFileInput" accept=".xlsx,.xls,.csv" class="hidden" onchange="handleExcelUpload(event)">
+                    
+                    <button onclick="openTransactionModal()" class="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-white text-xs sm:text-sm font-semibold shadow-sm transition-all cursor-pointer">
+                        <i data-lucide="plus-circle" class="w-4 h-4"></i>
+                        <span>+ Tambah Transaksi</span>
+                    </button>
+
+                    <button onclick="document.getElementById('excelFileInput').click()" class="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 active:bg-amber-600 text-slate-950 text-xs sm:text-sm font-semibold shadow-sm transition-all cursor-pointer">
+                        <i data-lucide="upload" class="w-4 h-4"></i>
+                        <span>Upload Excel (.xlsx)</span>
+                    </button>
+
+                    <button onclick="exportToExcel()" class="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-slate-700 hover:bg-slate-600 active:bg-slate-800 text-white border border-slate-600 text-xs sm:text-sm font-medium shadow-sm transition-all cursor-pointer">
+                        <i data-lucide="download" class="w-4 h-4 text-emerald-400"></i>
+                        <span>Export Excel</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+
+        <!-- 1. KPI Cards Section -->
+        <section class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <!-- KPI 1: Total Pendapatan -->
+            <div class="bg-white rounded-2xl p-5 border border-slate-200/80 shadow-sm hover:shadow-md transition-shadow relative overflow-hidden">
+                <div class="flex items-start justify-between">
+                    <div>
+                        <p class="text-xs font-semibold uppercase tracking-wider text-slate-500">Total Pendapatan</p>
+                        <h2 id="kpiTotalRevenue" class="text-2xl font-extrabold text-slate-900 mt-1">Rp 420.000</h2>
+                    </div>
+                    <div class="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
+                        <i data-lucide="wallet" class="w-5 h-5"></i>
+                    </div>
+                </div>
+                <div class="mt-3 pt-3 border-t border-slate-100 flex flex-wrap items-center justify-between gap-1 text-xs">
+                    <span id="kpiPaidRevenue" class="inline-flex items-center gap-1 font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md">
+                        <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span> Rp 364.000 Lunas
+                    </span>
+                    <span id="kpiUnpaidRevenue" class="inline-flex items-center gap-1 font-semibold text-rose-700 bg-rose-50 px-2 py-0.5 rounded-md">
+                        <span class="w-1.5 h-1.5 rounded-full bg-rose-500"></span> Rp 56.000 Belum Bayar
+                    </span>
+                </div>
+            </div>
+
+            <!-- KPI 2: Total Transaksi -->
+            <div class="bg-white rounded-2xl p-5 border border-slate-200/80 shadow-sm hover:shadow-md transition-shadow">
+                <div class="flex items-start justify-between">
+                    <div>
+                        <p class="text-xs font-semibold uppercase tracking-wider text-slate-500">Total Transaksi</p>
+                        <h2 id="kpiTotalTransactions" class="text-2xl font-extrabold text-slate-900 mt-1">15 Transaksi</h2>
+                    </div>
+                    <div class="w-10 h-10 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
+                        <i data-lucide="receipt" class="w-5 h-5"></i>
+                    </div>
+                </div>
+                <div class="mt-3 pt-3 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
+                    <span id="kpiPaidCount" class="font-medium text-slate-700">13 Lunas</span>
+                    <span id="kpiUnpaidCount" class="font-medium text-amber-700">2 Menunggu Pembayaran</span>
+                </div>
+            </div>
+
+            <!-- KPI 3: Total Porsi Terjual -->
+            <div class="bg-white rounded-2xl p-5 border border-slate-200/80 shadow-sm hover:shadow-md transition-shadow">
+                <div class="flex items-start justify-between">
+                    <div>
+                        <p class="text-xs font-semibold uppercase tracking-wider text-slate-500">Total Porsi Terjual</p>
+                        <h2 id="kpiTotalPortions" class="text-2xl font-extrabold text-slate-900 mt-1">15 Porsi</h2>
+                    </div>
+                    <div class="w-10 h-10 rounded-xl bg-orange-50 text-orange-600 flex items-center justify-center shrink-0">
+                        <i data-lucide="flame" class="w-5 h-5"></i>
+                    </div>
+                </div>
+                <div class="mt-3 pt-3 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
+                    <span id="kpiPortionBreakdown" class="font-medium text-slate-700">Paha: 8 porsi • Dada: 7 porsi</span>
+                </div>
+            </div>
+
+            <!-- KPI 4: Rata-rata Order -->
+            <div class="bg-white rounded-2xl p-5 border border-slate-200/80 shadow-sm hover:shadow-md transition-shadow">
+                <div class="flex items-start justify-between">
+                    <div>
+                        <p class="text-xs font-semibold uppercase tracking-wider text-slate-500">Rata-rata Order</p>
+                        <h2 id="kpiAvgOrder" class="text-2xl font-extrabold text-slate-900 mt-1">Rp 28.000</h2>
+                    </div>
+                    <div class="w-10 h-10 rounded-xl bg-slate-100 text-slate-700 flex items-center justify-center shrink-0">
+                        <i data-lucide="trending-up" class="w-5 h-5"></i>
+                    </div>
+                </div>
+                <div class="mt-3 pt-3 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
+                    <span id="kpiUniqueCustomers" class="font-medium text-slate-700">15 Pelanggan Unik</span>
+                    <span class="text-emerald-600 font-semibold">100% Aktif</span>
+                </div>
+            </div>
+        </section>
+
+        <!-- 2. Filter Bar Section -->
+        <section class="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200/80 shadow-sm">
+            <div class="flex flex-col lg:flex-row lg:items-end justify-between gap-4">
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 flex-1">
+                    <!-- Search Pembeli / Catatan / Menu -->
+                    <div>
+                        <label for="filterSearch" class="block text-xs font-semibold text-slate-600 mb-1">Cari Pembeli / Menu / Catatan</label>
+                        <div class="relative">
+                            <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2"></i>
+                            <input type="text" id="filterSearch" oninput="applyFilters()" placeholder="Contoh: Rizky, dada, taliwang..." class="w-full pl-9 pr-3 py-2 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-500/40 focus:border-amber-500 transition-all">
+                        </div>
+                    </div>
+
+                    <!-- Filter Metode Pembayaran -->
+                    <div>
+                        <label for="filterMethod" class="block text-xs font-semibold text-slate-600 mb-1">Metode Pembayaran</label>
+                        <select id="filterMethod" onchange="applyFilters()" class="w-full px-3 py-2 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-500/40 focus:border-amber-500 transition-all">
+                            <option value="ALL">Semua Metode</option>
+                            <option value="LinkAja">LinkAja</option>
+                            <option value="BNI">BNI</option>
+                            <option value="BCA">BCA</option>
+                            <option value="Mandiri">Mandiri</option>
+                            <option value="Cash">Cash</option>
+                            <option value="Belum Bayar">Belum Bayar</option>
+                        </select>
+                    </div>
+
+                    <!-- Filter Catatan / Potongan -->
+                    <div>
+                        <label for="filterNote" class="block text-xs font-semibold text-slate-600 mb-1">Catatan / Potongan</label>
+                        <select id="filterNote" onchange="applyFilters()" class="w-full px-3 py-2 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-500/40 focus:border-amber-500 transition-all">
+                            <option value="ALL">Semua Potongan</option>
+                            <option value="dada">Dada</option>
+                            <option value="paha">Paha</option>
+                        </select>
+                    </div>
+
+                    <!-- Filter Tanggal -->
+                    <div>
+                        <label for="filterDate" class="block text-xs font-semibold text-slate-600 mb-1">Filter Tanggal</label>
+                        <select id="filterDate" onchange="applyFilters()" class="w-full px-3 py-2 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-500/40 focus:border-amber-500 transition-all">
+                            <option value="ALL">Semua Tanggal</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Reset Filter & Reset Storage Buttons -->
+                <div class="flex items-center gap-2 shrink-0">
+                    <button onclick="resetFilters()" class="px-3.5 py-2 rounded-xl text-xs font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 transition-colors cursor-pointer">
+                        Reset Filter
+                    </button>
+                    <button onclick="openResetConfirmModal()" class="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold text-amber-800 bg-amber-100/80 hover:bg-amber-200/80 transition-colors cursor-pointer" title="Kembalikan ke 15 data awal Excel">
+                        <i data-lucide="rotate-ccw" class="w-3.5 h-3.5"></i>
+                        <span>Reset ke Data Excel Awal</span>
+                    </button>
+                </div>
+            </div>
+        </section>
+
+        <!-- 3. Charts Section (3 Visualisasi Interaktif) -->
+        <section class="grid grid-cols-1 lg:grid-cols-3 gap-5">
+            <!-- Chart 1: Doughnut Distribusi Metode Pembayaran -->
+            <div class="bg-white rounded-2xl p-5 border border-slate-200/80 shadow-sm flex flex-col">
+                <div class="flex items-center justify-between mb-3">
+                    <div>
+                        <h3 class="text-sm font-bold text-slate-900">Metode Pembayaran</h3>
+                        <p class="text-xs text-slate-500">Distribusi transaksi per kanal bayar</p>
+                    </div>
+                    <span class="p-2 rounded-lg bg-slate-100 text-slate-600">
+                        <i data-lucide="pie-chart" class="w-4 h-4"></i>
+                    </span>
+                </div>
+                <div class="chart-container flex-1 flex items-center justify-center">
+                    <canvas id="paymentMethodChart"></canvas>
+                </div>
+            </div>
+
+            <!-- Chart 2: Pie/Bar Preferensi Bagian / Catatan -->
+            <div class="bg-white rounded-2xl p-5 border border-slate-200/80 shadow-sm flex flex-col">
+                <div class="flex items-center justify-between mb-3">
+                    <div>
+                        <h3 class="text-sm font-bold text-slate-900">Preferensi Bagian / Catatan</h3>
+                        <p class="text-xs text-slate-500">Perbandingan permintaan Paha vs Dada</p>
+                    </div>
+                    <span class="p-2 rounded-lg bg-amber-50 text-amber-600">
+                        <i data-lucide="drumstick" class="w-4 h-4"></i>
+                    </span>
+                </div>
+                <div class="chart-container flex-1 flex items-center justify-center">
+                    <canvas id="portionPreferenceChart"></canvas>
+                </div>
+            </div>
+
+            <!-- Chart 3: Bar Performa Menu / Tren Penjualan Harian -->
+            <div class="bg-white rounded-2xl p-5 border border-slate-200/80 shadow-sm flex flex-col">
+                <div class="flex items-center justify-between mb-3">
+                    <div>
+                        <h3 class="text-sm font-bold text-slate-900">Tren Penjualan & Performa</h3>
+                        <p class="text-xs text-slate-500">Pendapatan berdasarkan tanggal transaksi</p>
+                    </div>
+                    <span class="p-2 rounded-lg bg-emerald-50 text-emerald-600">
+                        <i data-lucide="bar-chart-3" class="w-4 h-4"></i>
+                    </span>
+                </div>
+                <div class="chart-container flex-1 flex items-center justify-center">
+                    <canvas id="dailySalesChart"></canvas>
+                </div>
+            </div>
+        </section>
+
+        <!-- 4. Ringkasan Rekapitulasi (Top Pelanggan & Rekap Metode Pembayaran) -->
+        <section class="grid grid-cols-1 lg:grid-cols-2 gap-5">
+            <!-- Rekap Metode Pembayaran Otomatis -->
+            <div class="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden flex flex-col">
+                <div class="px-5 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+                    <div>
+                        <h3 class="text-sm font-bold text-slate-900">Rekapitulasi Metode Pembayaran</h3>
+                        <p class="text-xs text-slate-500">Perhitungan akurat otomatis dari seluruh data terfilter</p>
+                    </div>
+                    <span class="inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200/60">
+                        Auto-Sync
+                    </span>
+                </div>
+                <div class="overflow-x-auto flex-1">
+                    <table class="w-full text-left border-collapse">
+                        <thead>
+                            <tr class="bg-slate-50 text-slate-500 text-[11px] uppercase tracking-wider border-b border-slate-200/70">
+                                <th class="py-3 px-4 font-semibold">Metode Pembayaran</th>
+                                <th class="py-3 px-4 font-semibold text-center">Transaksi</th>
+                                <th class="py-3 px-4 font-semibold text-center">Porsi</th>
+                                <th class="py-3 px-4 font-semibold text-right">Total Nominal</th>
+                                <th class="py-3 px-4 font-semibold text-right">Porsi %</th>
+                            </tr>
+                        </thead>
+                        <tbody id="paymentSummaryBody" class="divide-y divide-slate-100 text-sm">
+                            <!-- Diisi via JS -->
+                        </tbody>
+                        <tfoot id="paymentSummaryFoot" class="bg-slate-900 text-white text-xs font-bold">
+                            <!-- Diisi via JS -->
+                        </tfoot>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Top Pelanggan Otomatis -->
+            <div class="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden flex flex-col">
+                <div class="px-5 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+                    <div>
+                        <h3 class="text-sm font-bold text-slate-900">Top Pelanggan Makan Siang</h3>
+                        <p class="text-xs text-slate-500">Peringkat pelanggan berdasarkan total belanja & frekuensi</p>
+                    </div>
+                    <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-200/60">
+                        <i data-lucide="award" class="w-3.5 h-3.5"></i> Leaderboard
+                    </span>
+                </div>
+                <div class="overflow-x-auto flex-1 max-h-[300px] overflow-y-auto">
+                    <table class="w-full text-left border-collapse">
+                        <thead class="sticky top-0 bg-slate-50 z-10">
+                            <tr class="text-slate-500 text-[11px] uppercase tracking-wider border-b border-slate-200/70">
+                                <th class="py-3 px-4 font-semibold w-12">Rank</th>
+                                <th class="py-3 px-4 font-semibold">Nama Pembeli</th>
+                                <th class="py-3 px-4 font-semibold text-center">Total Porsi</th>
+                                <th class="py-3 px-4 font-semibold text-right">Total Belanja</th>
+                                <th class="py-3 px-4 font-semibold text-center">Status</th>
+                            </tr>
+                        </thead>
+                        <tbody id="topCustomersBody" class="divide-y divide-slate-100 text-sm">
+                            <!-- Diisi via JS -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <!-- 5. Tabel Data Transaksi Lengkap -->
+        <section class="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden">
+            <div class="px-5 py-4 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2 bg-slate-50/50">
+                <div>
+                    <h3 class="text-base font-bold text-slate-900">Data Transaksi Penjualan</h3>
+                    <p class="text-xs text-slate-500">Ubah metode pembayaran langsung melalui dropdown pada setiap baris untuk memperbarui KPI & grafik seketika.</p>
+                </div>
+                <div class="flex items-center gap-2">
+                    <span id="tableRowCountBadge" class="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-slate-800 text-white">
+                        Menampilkan 15 dari 15 data
+                    </span>
+                </div>
+            </div>
+
+            <div class="overflow-x-auto">
+                <table class="w-full text-left border-collapse">
+                    <thead>
+                        <tr class="bg-slate-100/80 text-slate-600 text-xs uppercase tracking-wider border-b border-slate-200">
+                            <th class="py-3.5 px-4 font-bold w-12">No</th>
+                            <th class="py-3.5 px-4 font-bold whitespace-nowrap">Tanggal</th>
+                            <th class="py-3.5 px-4 font-bold">Pembeli</th>
+                            <th class="py-3.5 px-4 font-bold min-w-[230px]">Menu</th>
+                            <th class="py-3.5 px-4 font-bold">Kategori</th>
+                            <th class="py-3.5 px-4 font-bold text-right whitespace-nowrap">Harga</th>
+                            <th class="py-3.5 px-4 font-bold text-center">Qty</th>
+                            <th class="py-3.5 px-4 font-bold text-right whitespace-nowrap">Total</th>
+                            <th class="py-3.5 px-4 font-bold whitespace-nowrap">Metode Bayar</th>
+                            <th class="py-3.5 px-4 font-bold">Catatan</th>
+                            <th class="py-3.5 px-4 font-bold text-center">Aksi</th>
+                        </tr>
+                    </thead>
+                    <tbody id="transactionTableBody" class="divide-y divide-slate-100 text-sm">
+                        <!-- Baris transaksi dirender secara dinamis -->
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Empty State jika filter tidak menemukan hasil -->
+            <div id="emptyTableState" class="hidden py-12 px-4 text-center">
+                <div class="w-12 h-12 rounded-2xl bg-slate-100 text-slate-400 flex items-center justify-center mx-auto mb-3">
+                    <i data-lucide="search-x" class="w-6 h-6"></i>
+                </div>
+                <h4 class="text-sm font-bold text-slate-800">Tidak ada transaksi yang cocok</h4>
+                <p class="text-xs text-slate-500 mt-1">Coba ubah kata kunci pencarian atau reset filter yang aktif.</p>
+                <button onclick="resetFilters()" class="mt-3 px-4 py-2 rounded-xl bg-amber-500 text-slate-950 text-xs font-semibold hover:bg-amber-400 transition-colors cursor-pointer">
+                    Reset Semua Filter
+                </button>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- Footer -->
+    <footer class="bg-white border-t border-slate-200 mt-10 py-4">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-slate-500">
+            <p>Data tersimpan otomatis di penyimpanan lokal browser (<code class="bg-slate-100 px-1.5 py-0.5 rounded text-slate-700">localStorage</code>).</p>
+            <p>Sumber Awal: <span class="font-medium text-slate-700">Pencatatan Penjualan Makan Siang & Dashboard.xlsx</span></p>
+        </div>
+    </footer>
+
+    <!-- Modal Tambah / Edit Transaksi -->
+    <div id="transactionModal" class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4">
+        <div class="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-lg overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+            <div class="px-6 py-4 bg-slate-900 text-white flex items-center justify-between">
+                <div class="flex items-center gap-2.5">
+                    <div class="w-8 h-8 rounded-lg bg-amber-500 text-slate-950 flex items-center justify-center">
+                        <i data-lucide="utensils-crossed" class="w-4 h-4"></i>
+                    </div>
+                    <h3 id="modalTitle" class="text-base font-bold">Tambah Transaksi Baru</h3>
+                </div>
+                <button onclick="closeTransactionModal()" class="text-slate-400 hover:text-white p-1 rounded-lg transition-colors cursor-pointer">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+
+            <form id="transactionForm" onsubmit="saveTransaction(event)" class="p-6 space-y-4">
+                <input type="hidden" id="editTransactionId">
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                        <label for="inputTanggal" class="block text-xs font-semibold text-slate-700 mb-1">Tanggal <span class="text-rose-500">*</span></label>
+                        <input type="date" id="inputTanggal" required class="w-full px-3 py-2 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-500/40 focus:border-amber-500">
+                    </div>
+
+                    <div>
+                        <label for="inputPembeli" class="block text-xs font-semibold text-slate-700 mb-1">Nama Pembeli <span class="text-rose-500">*</span></label>
+                        <input type="text" id="inputPembeli" required placeholder="Contoh: Budi Santoso" class="w-full px-3 py-2 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-500/40 focus:border-amber-500">
+                    </div>
+                </div>
+
+                <div>
+                    <label for="inputMenu" class="block text-xs font-semibold text-slate-700 mb-1">Menu Pesanan <span class="text-rose-500">*</span></label>
+                    <input type="text" id="inputMenu" required value="Nasi Ayam Bakar Taliwang + Plecing Kangkung + Mendoan" class="w-full px-3 py-2 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-500/40 focus:border-amber-500">
+                </div>
+
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div>
+                        <label for="inputKategori" class="block text-xs font-semibold text-slate-700 mb-1">Kategori</label>
+                        <select id="inputKategori" class="w-full px-3 py-2 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-500/40 focus:border-amber-500">
+                            <option value="Makanan">Makanan</option>
+                            <option value="Minuman">Minuman</option>
+                            <option value="Snack">Snack</option>
+                            <option value="Paket">Paket</option>
+                        </select>
+                    </div>
+
+                    <div>
+                        <label for="inputHarga" class="block text-xs font-semibold text-slate-700 mb-1">Harga Satuan (Rp) <span class="text-rose-500">*</span></label>
+                        <input type="number" id="inputHarga" required min="0" step="500" value="28000" oninput="updateModalTotalPreview()" class="w-full px-3 py-2 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-500/40 focus:border-amber-500">
+                    </div>
+
+                    <div>
+                        <label for="inputQty" class="block text-xs font-semibold text-slate-700 mb-1">Qty (Porsi) <span class="text-rose-500">*</span></label>
+                        <input type="number" id="inputQty" required min="1" value="1" oninput="updateModalTotalPreview()" class="w-full px-3 py-2 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-500/40 focus:border-amber-500">
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                        <label for="inputMetode" class="block text-xs font-semibold text-slate-700 mb-1">Metode Pembayaran <span class="text-rose-500">*</span></label>
+                        <select id="inputMetode" class="w-full px-3 py-2 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-500/40 focus:border-amber-500">
+                            <option value="LinkAja">LinkAja</option>
+                            <option value="BNI">BNI</option>
+                            <option value="BCA">BCA</option>
+                            <option value="Mandiri">Mandiri</option>
+                            <option value="Cash">Cash</option>
+                            <option value="Belum Bayar">Belum Bayar</option>
+                        </select>
+                    </div>
+
+                    <div>
+                        <label for="inputCatatan" class="block text-xs font-semibold text-slate-700 mb-1">Catatan / Potongan</label>
+                        <input type="text" id="inputCatatan" list="catatanSuggestions" placeholder="dada / paha / pedas..." class="w-full px-3 py-2 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-500/40 focus:border-amber-500">
+                        <datalist id="catatanSuggestions">
+                            <option value="dada">
+                            <option value="paha">
+                            <option value="dada pedas">
+                            <option value="paha pedas">
+                        </datalist>
+                    </div>
+                </div>
+
+                <!-- Live Total Preview -->
+                <div class="p-3.5 rounded-xl bg-amber-50 border border-amber-200/80 flex items-center justify-between">
+                    <span class="text-xs font-semibold text-amber-900">Estimasi Total Transaksi:</span>
+                    <span id="modalTotalPreview" class="text-base font-extrabold text-amber-900">Rp 28.000</span>
+                </div>
+
+                <div class="pt-2 flex items-center justify-end gap-2.5">
+                    <button type="button" onclick="closeTransactionModal()" class="px-4 py-2 rounded-xl text-xs sm:text-sm font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 transition-colors cursor-pointer">
+                        Batal
+                    </button>
+                    <button type="submit" class="px-5 py-2 rounded-xl text-xs sm:text-sm font-semibold text-white bg-emerald-600 hover:bg-emerald-500 shadow-sm transition-colors cursor-pointer">
+                        Simpan Transaksi
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal Konfirmasi Custom (Reset Data / Hapus Baris - Pengganti confirm()) -->
+    <div id="confirmModal" class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4">
+        <div class="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-md p-6">
+            <div class="flex items-start gap-3.5">
+                <div id="confirmIconWrapper" class="w-10 h-10 rounded-xl bg-amber-100 text-amber-600 flex items-center justify-center shrink-0">
+                    <i data-lucide="alert-triangle" class="w-5 h-5"></i>
+                </div>
+                <div>
+                    <h3 id="confirmTitle" class="text-base font-bold text-slate-900">Konfirmasi Tindakan</h3>
+                    <p id="confirmMessage" class="text-xs sm:text-sm text-slate-600 mt-1">Apakah Anda yakin ingin melanjutkan tindakan ini?</p>
+                </div>
+            </div>
+            <div class="mt-6 flex items-center justify-end gap-2.5">
+                <button onclick="closeConfirmModal()" class="px-4 py-2 rounded-xl text-xs sm:text-sm font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 transition-colors cursor-pointer">
+                    Batal
+                </button>
+                <button id="confirmActionBtn" class="px-4 py-2 rounded-xl text-xs sm:text-sm font-semibold text-white bg-rose-600 hover:bg-rose-500 transition-colors cursor-pointer">
+                    Ya, Lanjutkan
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- JavaScript Application Logic -->
+    <script>
+        // =========================================================================
+        // 1. DATA AWAL (PRE-LOADED DARI FILE EXCEL 'Data Transaksi')
+        // =========================================================================
+        const INITIAL_EXCEL_DATA = [
+            { id: 1, no: 1, tanggal: '2026-10-11', pembeli: 'Rizky', menu: 'Nasi Ayam Bakar Taliwang + Plecing Kangkung + Mendoan', kategori: 'Makanan', harga: 28000, qty: 1, total: 28000, metode: 'Belum Bayar', catatan: 'dada' },
+            { id: 2, no: 2, tanggal: '2026-10-11', pembeli: 'Bu Tatik', menu: 'Nasi Ayam Bakar Taliwang + Plecing Kangkung + Mendoan', kategori: 'Makanan', harga: 28000, qty: 1, total: 28000, metode: 'LinkAja', catatan: 'dada' },
+            { id: 3, no: 3, tanggal: '2026-10-11', pembeli: 'Dimitri', menu: 'Nasi Ayam Bakar Taliwang + Plecing Kangkung + Mendoan', kategori: 'Makanan', harga: 28000, qty: 1, total: 28000, metode: 'LinkAja', catatan: 'paha' },
+            { id: 4, no: 4, tanggal: '2026-10-11', pembeli: 'Bu Ratih', menu: 'Nasi Ayam Bakar Taliwang + Plecing Kangkung + Mendoan', kategori: 'Makanan', harga: 28000, qty: 1, total: 28000, metode: 'LinkAja', catatan: 'paha' },
+            { id: 5, no: 5, tanggal: '2026-10-11', pembeli: 'Bianca', menu: 'Nasi Ayam Bakar Taliwang + Plecing Kangkung + Mendoan', kategori: 'Makanan', harga: 28000, qty: 1, total: 28000, metode: 'LinkAja', catatan: 'paha' },
+            { id: 6, no: 6, tanggal: '2026-10-11', pembeli: 'Alya', menu: 'Nasi Ayam Bakar Taliwang + Plecing Kangkung + Mendoan', kategori: 'Makanan', harga: 28000, qty: 1, total: 28000, metode: 'BNI', catatan: 'dada' },
+            { id: 7, no: 7, tanggal: '2026-10-11', pembeli: 'Mba Neneng', menu: 'Nasi Ayam Bakar Taliwang + Plecing Kangkung + Mendoan', kategori: 'Makanan', harga: 28000, qty: 1, total: 28000, metode: 'LinkAja', catatan: 'paha' },
+            { id: 8, no: 8, tanggal: '2026-10-11', pembeli: 'Levo', menu: 'Nasi Ayam Bakar Taliwang + Plecing Kangkung + Mendoan', kategori: 'Makanan', harga: 28000, qty: 1, total: 28000, metode: 'LinkAja', catatan: 'dada' },
+            { id: 9, no: 9, tanggal: '2026-10-11', pembeli: 'Mba Gona', menu: 'Nasi Ayam Bakar Taliwang + Plecing Kangkung + Mendoan', kategori: 'Makanan', harga: 28000, qty: 1, total: 28000, metode: 'LinkAja', catatan: 'paha' },
+            { id: 10, no: 10, tanggal: '2026-10-11', pembeli: 'Agal', menu: 'Nasi Ayam Bakar Taliwang + Plecing Kangkung + Mendoan', kategori: 'Makanan', harga: 28000, qty: 1, total: 28000, metode: 'BCA', catatan: 'paha' },
+            { id: 11, no: 11, tanggal: '2026-10-11', pembeli: 'Tulus', menu: 'Nasi Ayam Bakar Taliwang + Plecing Kangkung + Mendoan', kategori: 'Makanan', harga: 28000, qty: 1, total: 28000, metode: 'BNI', catatan: 'dada' },
+            { id: 12, no: 12, tanggal: '2026-10-11', pembeli: 'Avi', menu: 'Nasi Ayam Bakar Taliwang + Plecing Kangkung + Mendoan', kategori: 'Makanan', harga: 28000, qty: 1, total: 28000, metode: 'LinkAja', catatan: 'dada' },
+            { id: 13, no: 13, tanggal: '2026-10-11', pembeli: 'Kurnia', menu: 'Nasi Ayam Bakar Taliwang + Plecing Kangkung + Mendoan', kategori: 'Makanan', harga: 28000, qty: 1, total: 28000, metode: 'LinkAja', catatan: 'dada' },
+            { id: 14, no: 14, tanggal: '2026-10-11', pembeli: 'Rio', menu: 'Nasi Ayam Bakar Taliwang + Plecing Kangkung + Mendoan', kategori: 'Makanan', harga: 28000, qty: 1, total: 28000, metode: 'Belum Bayar', catatan: 'paha' },
+            { id: 15, no: 15, tanggal: '2026-10-11', pembeli: 'Mba Nona', menu: 'Nasi Ayam Bakar Taliwang + Plecing Kangkung + Mendoan', kategori: 'Makanan', harga: 28000, qty: 1, total: 28000, metode: 'LinkAja', catatan: 'paha' }
+        ];
+
+        const STORAGE_KEY = 'lunch_sales_dashboard_data_v1';
+        const PAYMENT_METHODS = ['LinkAja', 'BNI', 'BCA', 'Mandiri', 'Cash', 'Belum Bayar'];
+
+        // State Aplikasi
+        let transactions = [];
+        let filteredTransactions = [];
+
+        // Instance Chart.js
+        let paymentChartInstance = null;
+        let portionChartInstance = null;
+        let dailyChartInstance = null;
+
+        // =========================================================================
+        // 2. INISIALISASI & PENYIMPANAN LOCALSTORAGE
+        // =========================================================================
+        function loadData() {
+            try {
+                const saved = localStorage.getItem(STORAGE_KEY);
+                if (saved) {
+                    const parsed = JSON.parse(saved);
+                    if (Array.isArray(parsed) && parsed.length > 0) {
+                        transactions = parsed;
+                        return;
+                    }
+                }
+            } catch (e) {
+                console.error('Gagal memuat data dari localStorage:', e);
+            }
+            transactions = JSON.parse(JSON.stringify(INITIAL_EXCEL_DATA));
+            saveDataToStorage();
+        }
+
+        function saveDataToStorage() {
+            try {
+                // Pastikan nomor urut selalu rapi 1..N
+                transactions.forEach((item, idx) => {
+                    item.no = idx + 1;
+                    item.total = Number(item.harga) * Number(item.qty);
+                });
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(transactions));
+            } catch (e) {
+                console.error('Gagal menyimpan data ke localStorage:', e);
+            }
+        }
+
+        // =========================================================================
+        // 3. FORMATTER & HELPER UTILITIES
+        // =========================================================================
+        function formatRupiah(angka) {
+            return 'Rp ' + Number(angka || 0).toLocaleString('id-ID');
+        }
+
+        function formatTanggalIndo(dateStr) {
+            if (!dateStr) return '-';
+            const parts = dateStr.split('-');
+            if (parts.length !== 3) return dateStr;
+            const bulan = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
+            const mIdx = parseInt(parts[1], 10) - 1;
+            return `${parts[2]} ${bulan[mIdx] || parts[1]} ${parts[0]}`;
+        }
+
+        function escapeHTML(str) {
+            return String(str || '')
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#039;');
+        }
+
+        function showToast(message, type = 'success') {
+            const container = document.getElementById('toastContainer');
+            const toast = document.createElement('div');
+            
+            const bgColors = {
+                success: 'bg-slate-900 border-emerald-500 text-white',
+                warning: 'bg-amber-950 border-amber-500 text-amber-50',
+                error: 'bg-rose-950 border-rose-500 text-rose-50'
+            };
+            const iconNames = {
+                success: 'check-circle-2',
+                warning: 'info',
+                error: 'alert-circle'
+            };
+            const iconColors = {
+                success: 'text-emerald-400',
+                warning: 'text-amber-400',
+                error: 'text-rose-400'
+            };
+
+            toast.className = `pointer-events-auto flex items-center gap-2.5 px-4 py-3 rounded-xl border-l-4 shadow-xl text-xs sm:text-sm font-medium transition-all duration-300 transform translate-y-2 opacity-0 ${bgColors[type] || bgColors.success}`;
+            toast.innerHTML = `
+                <i data-lucide="${iconNames[type] || 'check-circle-2'}" class="w-4 h-4 shrink-0 ${iconColors[type] || 'text-emerald-400'}"></i>
+                <span>${escapeHTML(message)}</span>
+            `;
+
+            container.appendChild(toast);
+            lucide.createIcons();
+
+            requestAnimationFrame(() => {
+                toast.classList.remove('translate-y-2', 'opacity-0');
+            });
+
+            setTimeout(() => {
+                toast.classList.add('opacity-0', 'translate-y-2');
+                setTimeout(() => toast.remove(), 300);
+            }, 3200);
+        }
+
+        // =========================================================================
+        // 4. FILTERING & RENDER PIPELINE
+        // =========================================================================
+        function populateDateFilterDropdown() {
+            const dateSelect = document.getElementById('filterDate');
+            const currentVal = dateSelect.value;
+            const uniqueDates = [...new Set(transactions.map(t => t.tanggal).filter(Boolean))].sort();
+
+            dateSelect.innerHTML = '<option value="ALL">Semua Tanggal</option>';
+            uniqueDates.forEach(d => {
+                const opt = document.createElement('option');
+                opt.value = d;
+                opt.textContent = `${formatTanggalIndo(d)} (${d})`;
+                dateSelect.appendChild(opt);
+            });
+
+            if (uniqueDates.includes(currentVal)) {
+                dateSelect.value = currentVal;
+            }
+        }
+
+        function applyFilters() {
+            const searchQuery = document.getElementById('filterSearch').value.trim().toLowerCase();
+            const methodFilter = document.getElementById('filterMethod').value;
+            const noteFilter = document.getElementById('filterNote').value.toLowerCase();
+            const dateFilter = document.getElementById('filterDate').value;
+
+            filteredTransactions = transactions.filter(item => {
+                // Filter Search
+                const matchSearch = !searchQuery ||
+                    item.pembeli.toLowerCase().includes(searchQuery) ||
+                    item.menu.toLowerCase().includes(searchQuery) ||
+                    (item.catatan || '').toLowerCase().includes(searchQuery);
+
+                // Filter Metode Pembayaran
+                const matchMethod = methodFilter === 'ALL' ||
+                    item.metode.toLowerCase() === methodFilter.toLowerCase();
+
+                // Filter Catatan / Potongan
+                const itemNote = (item.catatan || '').toLowerCase();
+                const matchNote = noteFilter === 'all' || itemNote.includes(noteFilter);
+
+                // Filter Tanggal
+                const matchDate = dateFilter === 'ALL' || item.tanggal === dateFilter;
+
+                return matchSearch && matchMethod && matchNote && matchDate;
+            });
+
+            renderDashboard();
+        }
+
+        function resetFilters() {
+            document.getElementById('filterSearch').value = '';
+            document.getElementById('filterMethod').value = 'ALL';
+            document.getElementById('filterNote').value = 'ALL';
+            document.getElementById('filterDate').value = 'ALL';
+            applyFilters();
+            showToast('Filter telah direset', 'warning');
+        }
+
+        function renderDashboard() {
+            updateKPICards();
+            renderCharts();
+            renderPaymentMethodSummary();
+            renderTopCustomersSummary();
+            renderTransactionTable();
+            lucide.createIcons();
+        }
+
+        // =========================================================================
+        // 5. UPDATE 4 KARTU KPI DINAMIS
+        // =========================================================================
+        function updateKPICards() {
+            let totalRevenue = 0;
+            let paidRevenue = 0;
+            let unpaidRevenue = 0;
+            let totalTransactions = filteredTransactions.length;
+            let paidCount = 0;
+            let unpaidCount = 0;
+            let totalPortions = 0;
+            let pahaCount = 0;
+            let dadaCount = 0;
+            const uniqueBuyers = new Set();
+
+            filteredTransactions.forEach(item => {
+                const subtotal = Number(item.total) || (Number(item.harga) * Number(item.qty));
+                const qty = Number(item.qty) || 1;
+                totalRevenue += subtotal;
+                totalPortions += qty;
+                uniqueBuyers.add(item.pembeli.trim().toLowerCase());
+
+                if ((item.metode || '').toLowerCase() === 'belum bayar') {
+                    unpaidRevenue += subtotal;
+                    unpaidCount += 1;
+                } else {
+                    paidRevenue += subtotal;
+                    paidCount += 1;
+                }
+
+                const note = (item.catatan || '').toLowerCase();
+                if (note.includes('paha')) pahaCount += qty;
+                if (note.includes('dada')) dadaCount += qty;
+            });
+
+            const avgOrder = totalTransactions > 0 ? Math.round(totalRevenue / totalTransactions) : 0;
+
+            document.getElementById('kpiTotalRevenue').textContent = formatRupiah(totalRevenue);
+            document.getElementById('kpiPaidRevenue').innerHTML = `<span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span> ${formatRupiah(paidRevenue)} Lunas`;
+            document.getElementById('kpiUnpaidRevenue').innerHTML = `<span class="w-1.5 h-1.5 rounded-full bg-rose-500"></span> ${formatRupiah(unpaidRevenue)} Belum Bayar`;
+
+            document.getElementById('kpiTotalTransactions').textContent = `${totalTransactions} Transaksi`;
+            document.getElementById('kpiPaidCount').textContent = `${paidCount} Lunas`;
+            document.getElementById('kpiUnpaidCount').textContent = `${unpaidCount} Menunggu Pembayaran`;
+
+            document.getElementById('kpiTotalPortions').textContent = `${totalPortions} Porsi`;
+            document.getElementById('kpiPortionBreakdown').textContent = `Paha: ${pahaCount} porsi • Dada: ${dadaCount} porsi`;
+
+            document.getElementById('kpiAvgOrder').textContent = formatRupiah(avgOrder);
+            document.getElementById('kpiUniqueCustomers').textContent = `${uniqueBuyers.size} Pelanggan Unik`;
+        }
+
+        // =========================================================================
+        // 6. VISUALISASI GRAFIK INTERAKTIF (CHART.JS)
+        // =========================================================================
+        function renderCharts() {
+            // --- A. Doughnut Chart: Distribusi Metode Pembayaran ---
+            const methodCounts = {};
+            filteredTransactions.forEach(t => {
+                const m = t.metode || 'Lainnya';
+                methodCounts[m] = (methodCounts[m] || 0) + 1;
+            });
+
+            const methodLabels = Object.keys(methodCounts);
+            const methodValues = Object.values(methodCounts);
+            const methodColorMap = {
+                'LinkAja': '#ef4444',     // Merah LinkAja
+                'BNI': '#f97316',         // Oranye BNI
+                'BCA': '#2563eb',         // Biru BCA
+                'Mandiri': '#eab308',     // Kuning Mandiri
+                'Cash': '#10b981',        // Hijau Emerald Cash
+                'Belum Bayar': '#64748b'  // Slate Abu-abu
+            };
+            const methodColors = methodLabels.map(lbl => methodColorMap[lbl] || '#8b5cf6');
+
+            const ctxPayment = document.getElementById('paymentMethodChart').getContext('2d');
+            if (paymentChartInstance) paymentChartInstance.destroy();
+            paymentChartInstance = new Chart(ctxPayment, {
+                type: 'doughnut',
+                data: {
+                    labels: methodLabels,
+                    datasets: [{
+                        data: methodValues,
+                        backgroundColor: methodColors,
+                        borderWidth: 2,
+                        borderColor: '#ffffff',
+                        hoverOffset: 6
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    cutout: '62%',
+                    plugins: {
+                        legend: {
+                            position: 'bottom',
+                            labels: {
+                                usePointStyle: true,
+                                padding: 14,
+                                font: { family: 'Inter', size: 11, weight: '600' }
+                            }
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(ctx) {
+                                    const val = ctx.raw || 0;
+                                    const total = methodValues.reduce((a, b) => a + b, 0);
+                                    const pct = total > 0 ? ((val / total) * 100).toFixed(1) : 0;
+                                    return ` ${ctx.label}: ${val} transaksi (${pct}%)`;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+
+            // --- B. Bar/Pie Chart: Preferensi Bagian / Catatan ---
+            const noteCounts = { 'Paha': 0, 'Dada': 0 };
+            filteredTransactions.forEach(t => {
+                const note = (t.catatan || '').trim().toLowerCase();
+                const qty = Number(t.qty) || 1;
+                if (note.includes('paha')) {
+                    noteCounts['Paha'] += qty;
+                } else if (note.includes('dada')) {
+                    noteCounts['Dada'] += qty;
+                } else if (note) {
+                    const label = note.charAt(0).toUpperCase() + note.slice(1);
+                    noteCounts[label] = (noteCounts[label] || 0) + qty;
+                }
+            });
+
+            const noteLabels = Object.keys(noteCounts);
+            const noteValues = Object.values(noteCounts);
+
+            const ctxPortion = document.getElementById('portionPreferenceChart').getContext('2d');
+            if (portionChartInstance) portionChartInstance.destroy();
+            portionChartInstance = new Chart(ctxPortion, {
+                type: 'bar',
+                data: {
+                    labels: noteLabels,
+                    datasets: [{
+                        label: 'Jumlah Porsi',
+                        data: noteValues,
+                        backgroundColor: ['#d97706', '#059669', '#3b82f6', '#8b5cf6'],
+                        borderRadius: 10,
+                        barThickness: 46
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            callbacks: {
+                                label: ctx => ` ${ctx.raw} Porsi`
+                            }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: { stepSize: 2, font: { family: 'Inter', size: 11 } },
+                            grid: { color: '#f1f5f9' }
+                        },
+                        x: {
+                            ticks: { font: { family: 'Inter', size: 12, weight: '600' } },
+                            grid: { display: false }
+                        }
+                    }
+                }
+            });
+
+            // --- C. Bar Chart: Tren Penjualan Harian ---
+            const dailySales = {};
+            filteredTransactions.forEach(t => {
+                const d = t.tanggal || 'Tanpa Tanggal';
+                dailySales[d] = (dailySales[d] || 0) + (Number(t.total) || 0);
+            });
+
+            const sortedDates = Object.keys(dailySales).sort();
+            const dailyLabels = sortedDates.map(d => formatTanggalIndo(d));
+            const dailyValues = sortedDates.map(d => dailySales[d]);
+
+            const ctxDaily = document.getElementById('dailySalesChart').getContext('2d');
+            if (dailyChartInstance) dailyChartInstance.destroy();
+            dailyChartInstance = new Chart(ctxDaily, {
+                type: 'bar',
+                data: {
+                    labels: dailyLabels,
+                    datasets: [{
+                        label: 'Total Pendapatan',
+                        data: dailyValues,
+                        backgroundColor: '#1e293b',
+                        hoverBackgroundColor: '#d97706',
+                        borderRadius: 10,
+                        maxBarThickness: 56
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            callbacks: {
+                                label: ctx => ` ${formatRupiah(ctx.raw)}`
+                            }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                font: { family: 'Inter', size: 10 },
+                                callback: val => 'Rp ' + (val / 1000) + 'k'
+                            },
+                            grid: { color: '#f1f5f9' }
+                        },
+                        x: {
+                            ticks: { font: { family: 'Inter', size: 11, weight: '600' } },
+                            grid: { display: false }
+                        }
+                    }
+                }
+            });
+        }
+
+        // =========================================================================
+        // 7. REKAPITULASI METODE PEMBAYARAN & TOP PELANGGAN
+        // =========================================================================
+        function renderPaymentMethodSummary() {
+            const tbody = document.getElementById('paymentSummaryBody');
+            const tfoot = document.getElementById('paymentSummaryFoot');
+
+            const summaryMap = {};
+            let grandTx = 0;
+            let grandQty = 0;
+            let grandTotal = 0;
+
+            filteredTransactions.forEach(t => {
+                const m = t.metode || 'Lainnya';
+                if (!summaryMap[m]) {
+                    summaryMap[m] = { metode: m, tx: 0, qty: 0, total: 0 };
+                }
+                const qty = Number(t.qty) || 1;
+                const total = Number(t.total) || 0;
+                summaryMap[m].tx += 1;
+                summaryMap[m].qty += qty;
+                summaryMap[m].total += total;
+
+                grandTx += 1;
+                grandQty += qty;
+                grandTotal += total;
+            });
+
+            // Urutkan berdasarkan total nominal terbesar
+            const rows = Object.values(summaryMap).sort((a, b) => b.total - a.total);
+
+            if (rows.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="5" class="py-6 text-center text-xs text-slate-400">Belum ada data transaksi</td></tr>`;
+                tfoot.innerHTML = '';
+                return;
+            }
+
+            tbody.innerHTML = rows.map(r => {
+                const pct = grandTotal > 0 ? ((r.total / grandTotal) * 100).toFixed(1) : '0.0';
+                const isUnpaid = r.metode.toLowerCase() === 'belum bayar';
+                return `
+                    <tr class="hover:bg-slate-50/80 transition-colors">
+                        <td class="py-2.5 px-4 font-semibold text-slate-800 flex items-center gap-2">
+                            <span class="w-2.5 h-2.5 rounded-full ${getMethodDotColor(r.metode)}"></span>
+                            <span>${escapeHTML(r.metode)}</span>
+                        </td>
+                        <td class="py-2.5 px-4 text-center text-slate-600 font-medium">${r.tx}</td>
+                        <td class="py-2.5 px-4 text-center text-slate-600 font-medium">${r.qty}</td>
+                        <td class="py-2.5 px-4 text-right font-bold ${isUnpaid ? 'text-rose-600' : 'text-slate-900'}">${formatRupiah(r.total)}</td>
+                        <td class="py-2.5 px-4 text-right text-xs font-semibold text-slate-500">${pct}%</td>
+                    </tr>
+                `;
+            }).join('');
+
+            tfoot.innerHTML = `
+                <tr>
+                    <td class="py-3 px-4">TOTAL KESELURUHAN</td>
+                    <td class="py-3 px-4 text-center">${grandTx}</td>
+                    <td class="py-3 px-4 text-center">${grandQty}</td>
+                    <td class="py-3 px-4 text-right text-amber-300">${formatRupiah(grandTotal)}</td>
+                    <td class="py-3 px-4 text-right">100%</td>
+                </tr>
+            `;
+        }
+
+        function renderTopCustomersSummary() {
+            const tbody = document.getElementById('topCustomersBody');
+            const customerMap = {};
+
+            filteredTransactions.forEach(t => {
+                const name = (t.pembeli || 'Anonim').trim();
+                const key = name.toLowerCase();
+                if (!customerMap[key]) {
+                    customerMap[key] = {
+                        nama: name,
+                        qty: 0,
+                        total: 0,
+                        hasUnpaid: false
+                    };
+                }
+                customerMap[key].qty += (Number(t.qty) || 1);
+                customerMap[key].total += (Number(t.total) || 0);
+                if ((t.metode || '').toLowerCase() === 'belum bayar') {
+                    customerMap[key].hasUnpaid = true;
+                }
+            });
+
+            const sortedCustomers = Object.values(customerMap).sort((a, b) => {
+                if (b.total !== a.total) return b.total - a.total;
+                return a.nama.localeCompare(b.nama);
+            });
+
+            if (sortedCustomers.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="5" class="py-6 text-center text-xs text-slate-400">Belum ada data pelanggan</td></tr>`;
+                return;
+            }
+
+            tbody.innerHTML = sortedCustomers.map((c, idx) => {
+                const rankBadge = idx === 0
+                    ? `<span class="inline-flex items-center justify-center w-6 h-6 rounded-full bg-amber-100 text-amber-800 font-bold text-xs">1</span>`
+                    : idx === 1
+                    ? `<span class="inline-flex items-center justify-center w-6 h-6 rounded-full bg-slate-200 text-slate-800 font-bold text-xs">2</span>`
+                    : idx === 2
+                    ? `<span class="inline-flex items-center justify-center w-6 h-6 rounded-full bg-orange-100 text-orange-800 font-bold text-xs">3</span>`
+                    : `<span class="text-xs font-semibold text-slate-400 pl-2">${idx + 1}</span>`;
+
+                const statusBadge = c.hasUnpaid
+                    ? `<span class="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold bg-rose-50 text-rose-700 border border-rose-200">Belum Lunas</span>`
+                    : `<span class="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">Lunas</span>`;
+
+                return `
+                    <tr class="hover:bg-slate-50/80 transition-colors">
+                        <td class="py-2.5 px-4">${rankBadge}</td>
+                        <td class="py-2.5 px-4 font-semibold text-slate-800">${escapeHTML(c.nama)}</td>
+                        <td class="py-2.5 px-4 text-center text-slate-600 font-medium">${c.qty} porsi</td>
+                        <td class="py-2.5 px-4 text-right font-bold text-slate-900">${formatRupiah(c.total)}</td>
+                        <td class="py-2.5 px-4 text-center">${statusBadge}</td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        // =========================================================================
+        // 8. TABEL DATA TRANSAKSI LENGKAP & INLINE DROPDOWN METODE BAYAR
+        // =========================================================================
+        function getMethodSelectStyle(metode) {
+            const m = (metode || '').toLowerCase();
+            if (m === 'belum bayar') return 'bg-rose-50 text-rose-700 border-rose-300 font-bold';
+            if (m === 'linkaja') return 'bg-red-50 text-red-700 border-red-200 font-semibold';
+            if (m === 'bni') return 'bg-orange-50 text-orange-700 border-orange-200 font-semibold';
+            if (m === 'bca') return 'bg-blue-50 text-blue-700 border-blue-200 font-semibold';
+            if (m === 'mandiri') return 'bg-amber-50 text-amber-800 border-amber-200 font-semibold';
+            return 'bg-emerald-50 text-emerald-700 border-emerald-200 font-semibold';
+        }
+
+        function getMethodDotColor(metode) {
+            const m = (metode || '').toLowerCase();
+            if (m === 'belum bayar') return 'bg-rose-500';
+            if (m === 'linkaja') return 'bg-red-500';
+            if (m === 'bni') return 'bg-orange-500';
+            if (m === 'bca') return 'bg-blue-600';
+            if (m === 'mandiri') return 'bg-amber-500';
+            return 'bg-emerald-500';
+        }
+
+        function renderTransactionTable() {
+            const tbody = document.getElementById('transactionTableBody');
+            const emptyState = document.getElementById('emptyTableState');
+            const countBadge = document.getElementById('tableRowCountBadge');
+
+            countBadge.textContent = `Menampilkan ${filteredTransactions.length} dari ${transactions.length} data`;
+
+            if (filteredTransactions.length === 0) {
+                tbody.innerHTML = '';
+                emptyState.classList.remove('hidden');
+                return;
+            }
+
+            emptyState.classList.add('hidden');
+
+            tbody.innerHTML = filteredTransactions.map((item) => {
+                const noteLower = (item.catatan || '').toLowerCase();
+                const noteBadgeClass = noteLower.includes('paha')
+                    ? 'bg-amber-100/80 text-amber-800 border-amber-200'
+                    : noteLower.includes('dada')
+                    ? 'bg-emerald-100/80 text-emerald-800 border-emerald-200'
+                    : 'bg-slate-100 text-slate-700 border-slate-200';
+
+                const optionsHtml = PAYMENT_METHODS.map(m =>
+                    `<option value="${m}" ${item.metode === m ? 'selected' : ''}>${m}</option>`
+                ).join('');
+
+                return `
+                    <tr class="hover:bg-amber-50/30 transition-colors group">
+                        <td class="py-3 px-4 font-semibold text-slate-500">${item.no}</td>
+                        <td class="py-3 px-4 text-slate-600 whitespace-nowrap text-xs font-medium">${formatTanggalIndo(item.tanggal)}</td>
+                        <td class="py-3 px-4 font-bold text-slate-900 whitespace-nowrap">${escapeHTML(item.pembeli)}</td>
+                        <td class="py-3 px-4 text-slate-700 text-xs leading-relaxed">${escapeHTML(item.menu)}</td>
+                        <td class="py-3 px-4">
+                            <span class="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium bg-slate-100 text-slate-700">
+                                ${escapeHTML(item.kategori)}
+                            </span>
+                        </td>
+                        <td class="py-3 px-4 text-right text-slate-600 whitespace-nowrap">${formatRupiah(item.harga)}</td>
+                        <td class="py-3 px-4 text-center font-semibold text-slate-800">${item.qty}</td>
+                        <td class="py-3 px-4 text-right font-bold text-slate-900 whitespace-nowrap">${formatRupiah(item.total)}</td>
+                        <td class="py-3 px-4 whitespace-nowrap">
+                            <select onchange="quickUpdatePaymentMethod(${item.id}, this.value)" aria-label="Metode pembayaran ${escapeHTML(item.pembeli)}" class="px-2.5 py-1.5 rounded-lg text-xs border cursor-pointer focus:outline-none focus:ring-2 focus:ring-amber-500/40 transition-all ${getMethodSelectStyle(item.metode)}">
+                                ${optionsHtml}
+                            </select>
+                        </td>
+                        <td class="py-3 px-4 whitespace-nowrap">
+                            ${item.catatan ? `<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold border ${noteBadgeClass}">${escapeHTML(item.catatan)}</span>` : '<span class="text-slate-400 text-xs">-</span>'}
+                        </td>
+                        <td class="py-3 px-4 text-center whitespace-nowrap">
+                            <div class="inline-flex items-center gap-1">
+                                <button onclick="openTransactionModal(${item.id})" class="p-1.5 rounded-lg text-slate-500 hover:text-amber-600 hover:bg-amber-50 transition-colors cursor-pointer" title="Edit Transaksi">
+                                    <i data-lucide="pencil" class="w-4 h-4"></i>
+                                </button>
+                                <button onclick="openDeleteConfirmModal(${item.id})" class="p-1.5 rounded-lg text-slate-500 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer" title="Hapus Transaksi">
+                                    <i data-lucide="trash-2" class="w-4 h-4"></i>
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        // Quick inline update metode bayar
+        function quickUpdatePaymentMethod(id, newMethod) {
+            const idx = transactions.findIndex(t => t.id === id);
+            if (idx !== -1) {
+                const oldMethod = transactions[idx].metode;
+                transactions[idx].metode = newMethod;
+                saveDataToStorage();
+                applyFilters();
+                showToast(`Status bayar ${transactions[idx].pembeli} diubah: ${oldMethod} → ${newMethod}`, 'success');
+            }
+        }
+
+        // =========================================================================
+        // 9. MODAL TAMBAH / EDIT & HAPUS / RESET DATA
+        // =========================================================================
+        function openTransactionModal(id = null) {
+            const modal = document.getElementById('transactionModal');
+            const title = document.getElementById('modalTitle');
+            const editIdInput = document.getElementById('editTransactionId');
+
+            if (id !== null) {
+                const item = transactions.find(t => t.id === id);
+                if (!item) return;
+                title.textContent = `Edit Transaksi #${item.no} (${item.pembeli})`;
+                editIdInput.value = item.id;
+                document.getElementById('inputTanggal').value = item.tanggal;
+                document.getElementById('inputPembeli').value = item.pembeli;
+                document.getElementById('inputMenu').value = item.menu;
+                document.getElementById('inputKategori').value = item.kategori || 'Makanan';
+                document.getElementById('inputHarga').value = item.harga;
+                document.getElementById('inputQty').value = item.qty;
+                document.getElementById('inputMetode').value = item.metode;
+                document.getElementById('inputCatatan').value = item.catatan || '';
+            } else {
+                title.textContent = 'Tambah Transaksi Baru';
+                editIdInput.value = '';
+                const defaultDate = transactions.length > 0 ? transactions[transactions.length - 1].tanggal : new Date().toISOString().split('T')[0];
+                document.getElementById('inputTanggal').value = defaultDate;
+                document.getElementById('inputPembeli').value = '';
+                document.getElementById('inputMenu').value = 'Nasi Ayam Bakar Taliwang + Plecing Kangkung + Mendoan';
+                document.getElementById('inputKategori').value = 'Makanan';
+                document.getElementById('inputHarga').value = 28000;
+                document.getElementById('inputQty').value = 1;
+                document.getElementById('inputMetode').value = 'LinkAja';
+                document.getElementById('inputCatatan').value = '';
+            }
+
+            updateModalTotalPreview();
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+        }
+
+        function closeTransactionModal() {
+            const modal = document.getElementById('transactionModal');
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+        }
+
+        function updateModalTotalPreview() {
+            const harga = Number(document.getElementById('inputHarga').value) || 0;
+            const qty = Number(document.getElementById('inputQty').value) || 0;
+            document.getElementById('modalTotalPreview').textContent = formatRupiah(harga * qty);
+        }
+
+        function saveTransaction(event) {
+            event.preventDefault();
+            const editId = document.getElementById('editTransactionId').value;
+            const tanggal = document.getElementById('inputTanggal').value;
+            const pembeli = document.getElementById('inputPembeli').value.trim();
+            const menu = document.getElementById('inputMenu').value.trim();
+            const kategori = document.getElementById('inputKategori').value;
+            const harga = Number(document.getElementById('inputHarga').value) || 0;
+            const qty = Number(document.getElementById('inputQty').value) || 1;
+            const metode = document.getElementById('inputMetode').value;
+            const catatan = document.getElementById('inputCatatan').value.trim();
+            const total = harga * qty;
+
+            if (editId) {
+                const idx = transactions.findIndex(t => t.id === Number(editId));
+                if (idx !== -1) {
+                    transactions[idx] = {
+                        ...transactions[idx],
+                        tanggal, pembeli, menu, kategori, harga, qty, total, metode, catatan
+                    };
+                    showToast(`Transaksi ${pembeli} berhasil diperbarui!`);
+                }
+            } else {
+                const maxId = transactions.reduce((max, t) => Math.max(max, Number(t.id) || 0), 0);
+                transactions.push({
+                    id: maxId + 1,
+                    no: transactions.length + 1,
+                    tanggal, pembeli, menu, kategori, harga, qty, total, metode, catatan
+                });
+                showToast(`Transaksi baru atas nama ${pembeli} ditambahkan!`);
+            }
+
+            saveDataToStorage();
+            populateDateFilterDropdown();
+            applyFilters();
+            closeTransactionModal();
+        }
+
+        // Custom Confirm Modal Logic
+        let pendingConfirmAction = null;
+
+        function openDeleteConfirmModal(id) {
+            const item = transactions.find(t => t.id === id);
+            if (!item) return;
+
+            document.getElementById('confirmTitle').textContent = 'Hapus Transaksi?';
+            document.getElementById('confirmMessage').textContent = `Anda yakin ingin menghapus transaksi #${item.no} atas nama "${item.pembeli}" (${formatRupiah(item.total)})?`;
+            const btn = document.getElementById('confirmActionBtn');
+            btn.textContent = 'Ya, Hapus';
+            btn.className = 'px-4 py-2 rounded-xl text-xs sm:text-sm font-semibold text-white bg-rose-600 hover:bg-rose-500 transition-colors cursor-pointer';
+
+            pendingConfirmAction = () => {
+                transactions = transactions.filter(t => t.id !== id);
+                saveDataToStorage();
+                populateDateFilterDropdown();
+                applyFilters();
+                showToast(`Transaksi ${item.pembeli} telah dihapus`, 'warning');
+            };
+
+            const modal = document.getElementById('confirmModal');
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+        }
+
+        function openResetConfirmModal() {
+            document.getElementById('confirmTitle').textContent = 'Reset ke Data Excel Awal?';
+            document.getElementById('confirmMessage').textContent = 'Semua perubahan lokal akan dihapus dan dashboard akan dikembalikan ke 15 transaksi awal dari file Excel.';
+            const btn = document.getElementById('confirmActionBtn');
+            btn.textContent = 'Ya, Reset Data';
+            btn.className = 'px-4 py-2 rounded-xl text-xs sm:text-sm font-semibold text-slate-950 bg-amber-500 hover:bg-amber-400 transition-colors cursor-pointer';
+
+            pendingConfirmAction = () => {
+                transactions = JSON.parse(JSON.stringify(INITIAL_EXCEL_DATA));
+                saveDataToStorage();
+                resetFilters();
+                populateDateFilterDropdown();
+                applyFilters();
+                showToast('Data berhasil dikembalikan ke 15 transaksi Excel awal!', 'success');
+            };
+
+            const modal = document.getElementById('confirmModal');
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+        }
+
+        function closeConfirmModal() {
+            const modal = document.getElementById('confirmModal');
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+            pendingConfirmAction = null;
+        }
+
+        document.getElementById('confirmActionBtn').addEventListener('click', () => {
+            if (typeof pendingConfirmAction === 'function') {
+                pendingConfirmAction();
+            }
+            closeConfirmModal();
+        });
+
+        // =========================================================================
+        // 10. IMPORT & EXPORT EXCEL MENGGUNAKAN SHEETJS (XLSX)
+        // =========================================================================
+        function excelSerialToYYYYMMDD(val) {
+            if (!val) return new Date().toISOString().split('T')[0];
+            if (typeof val === 'number') {
+                // Konversi serial date Excel ke JS Date
+                const utcDays = Math.floor(val - 25569);
+                const utcValue = utcDays * 86400;
+                const dateInfo = new Date(utcValue * 1000);
+                return dateInfo.toISOString().split('T')[0];
+            }
+            const str = String(val).trim();
+            if (/^\d{4}-\d{2}-\d{2}/.test(str)) {
+                return str.slice(0, 10);
+            }
+            const parsed = new Date(str);
+            if (!isNaN(parsed.getTime())) {
+                return parsed.toISOString().split('T')[0];
+            }
+            return str;
+        }
+
+        function handleExcelUpload(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const data = new Uint8Array(e.target.result);
+                    const workbook = XLSX.read(data, { type: 'array' });
+
+                    // Cari sheet 'Data Transaksi' atau gunakan sheet pertama
+                    const targetSheetName = workbook.SheetNames.find(name =>
+                        name.toLowerCase().includes('transaksi') || name.toLowerCase().includes('data')
+                    ) || workbook.SheetNames[0];
+
+                    const worksheet = workbook.Sheets[targetSheetName];
+                    const rawRows = XLSX.utils.sheet_to_json(worksheet, { defval: '' });
+
+                    if (!rawRows || rawRows.length === 0) {
+                        showToast('File Excel kosong atau format tidak terbaca.', 'error');
+                        return;
+                    }
+
+                    // Normalisasi nama kolom (fleksibel huruf besar/kecil)
+                    const importedTransactions = [];
+                    rawRows.forEach((row, index) => {
+                        const normalized = {};
+                        Object.keys(row).forEach(k => {
+                            normalized[k.trim().toLowerCase()] = row[k];
+                        });
+
+                        const pembeli = String(normalized['pembeli'] || normalized['nama'] || normalized['pelanggan'] || '').trim();
+                        const menu = String(normalized['menu'] || normalized['pesanan'] || '').trim();
+
+                        // Abaikan baris kosong atau baris TOTAL di bawah tabel Excel
+                        if (!pembeli || pembeli.toLowerCase() === 'total') return;
+
+                        const harga = Number(String(normalized['harga'] || 0).replace(/[^0-9.-]+/g, '')) || 0;
+                        const qty = Number(String(normalized['qty'] || normalized['jumlah'] || 1).replace(/[^0-9.-]+/g, '')) || 1;
+                        const totalRaw = Number(String(normalized['total'] || 0).replace(/[^0-9.-]+/g, ''));
+                        const total = totalRaw > 0 ? totalRaw : (harga * qty);
+
+                        importedTransactions.push({
+                            id: index + 1,
+                            no: importedTransactions.length + 1,
+                            tanggal: excelSerialToYYYYMMDD(normalized['tanggal'] || normalized['date']),
+                            pembeli: pembeli,
+                            menu: menu || 'Menu Makan Siang',
+                            kategori: String(normalized['kategori'] || 'Makanan').trim(),
+                            harga: harga,
+                            qty: qty,
+                            total: total,
+                            metode: String(normalized['metode'] || normalized['metode pembayaran'] || normalized['pembayaran'] || 'Belum Bayar').trim(),
+                            catatan: String(normalized['catatan'] || normalized['keterangan'] || '').trim()
+                        });
+                    });
+
+                    if (importedTransactions.length === 0) {
+                        showToast('Tidak ditemukan baris transaksi yang valid pada file Excel.', 'error');
+                        return;
+                    }
+
+                    transactions = importedTransactions;
+                    saveDataToStorage();
+                    resetFilters();
+                    populateDateFilterDropdown();
+                    applyFilters();
+                    showToast(`Berhasil mengimpor ${transactions.length} transaksi dari "${file.name}"!`, 'success');
+                } catch (err) {
+                    console.error(err);
+                    showToast('Terjadi kesalahan saat membaca file Excel.', 'error');
+                } finally {
+                    event.target.value = '';
+                }
+            };
+            reader.readAsArrayBuffer(file);
+        }
+
+        function exportToExcel() {
+            try {
+                // Sheet 1: Data Transaksi
+                const txSheetData = transactions.map(t => ({
+                    'No': t.no,
+                    'Tanggal': t.tanggal,
+                    'Pembeli': t.pembeli,
+                    'Menu': t.menu,
+                    'Kategori': t.kategori,
+                    'Harga': t.harga,
+                    'Qty': t.qty,
+                    'Total': t.total,
+                    'Metode': t.metode,
+                    'Catatan': t.catatan
+                }));
+
+                // Sheet 2: Rekap Dashboard (Metode Pembayaran & Top Pelanggan)
+                const methodSummary = {};
+                transactions.forEach(t => {
+                    const m = t.metode || 'Lainnya';
+                    if (!methodSummary[m]) methodSummary[m] = { 'Metode Pembayaran': m, 'Jumlah Transaksi': 0, 'Total Porsi': 0, 'Total Nominal': 0 };
+                    methodSummary[m]['Jumlah Transaksi'] += 1;
+                    methodSummary[m]['Total Porsi'] += Number(t.qty) || 1;
+                    methodSummary[m]['Total Nominal'] += Number(t.total) || 0;
+                });
+
+                const wb = XLSX.utils.book_new();
+                const wsTransaksi = XLSX.utils.json_to_sheet(txSheetData);
+                const wsRekap = XLSX.utils.json_to_sheet(Object.values(methodSummary));
+
+                XLSX.utils.book_append_sheet(wb, wsTransaksi, 'Data Transaksi');
+                XLSX.utils.book_append_sheet(wb, wsRekap, 'Rekap Pembayaran');
+
+                const todayStr = new Date().toISOString().split('T')[0];
+                XLSX.writeFile(wb, `Rekap_Penjualan_Makan_Siang_${todayStr}.xlsx`);
+                showToast('File Excel berhasil diunduh!', 'success');
+            } catch (err) {
+                console.error(err);
+                showToast('Gagal mengekspor data ke Excel.', 'error');
+            }
+        }
+
+        // =========================================================================
+        // 11. STARTUP ON WINDOW LOAD
+        // =========================================================================
+        window.onload = function() {
+            loadData();
+            populateDateFilterDropdown();
+            applyFilters();
+        };
+    </script>
+</body>
+</html>
